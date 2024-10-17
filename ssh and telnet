@@ -1,0 +1,146 @@
+# Import required modules/packages/library
+import pexpect
+import os
+
+# Define variables
+ip_address = '192.168.56.101'  # IP address for both Telnet and SSH
+username = 'prne'  # Username for both connections
+password = 'cisco123!'  # Password for both connections
+password_enable = 'class123!'  # Enable password for both connections
+output_file_telnet = os.path.expanduser('~/labs/prne/telnet_running_config.txt')
+output_file_ssh = os.path.expanduser('~/labs/prne/ssh_running_config.txt')
+
+# =================== TELNET CONNECTION ===================
+
+# Telnet connection and retrieve running config
+def connect_telnet():
+    print(f"Attempting Telnet connection to {ip_address}...")
+
+    # Start Telnet session
+    session = pexpect.spawn('telnet ' + ip_address, encoding='utf-8', timeout=20)
+    result = session.expect(['Username:', pexpect.TIMEOUT])
+
+    # Check for error in creating Telnet session
+    if result != 0:
+        print('---FAILURE! creating Telnet session for:', ip_address)
+        exit()
+
+    # Send username and password
+    session.sendline(username)
+    result = session.expect(['Password:', pexpect.TIMEOUT])
+    
+    if result != 0:
+        print('--FAILURE! entering username:', username)
+        exit()
+
+    session.sendline(password)
+    result = session.expect(['#', pexpect.TIMEOUT])
+    
+    if result != 0:
+        print('--FAILURE! entering password:', password)
+        exit()
+
+    print(f"--- Success! Telnet connection established to {ip_address}")
+
+    # Send 'show running-config' command
+    session.sendline('show running-config')
+    session.expect('#', timeout=30)
+    running_config_telnet = session.before
+
+    # Save the Telnet running config to a file
+    with open(output_file_telnet, 'w') as file:
+        file.write(running_config_telnet)
+
+    print(f"--- Telnet running config saved to {output_file_telnet}")
+    
+    # Close Telnet session
+    session.sendline('quit')
+    session.close()
+
+# =================== SSH CONNECTION ===================
+
+# SSH connection, change hostname, and retrieve running config
+def connect_ssh():
+    print(f"Attempting SSH connection to {ip_address}...")
+
+    # Start SSH session
+    session = pexpect.spawn('ssh ' + username + '@' + ip_address, encoding='utf-8', timeout=20)
+    result = session.expect(['Password:', pexpect.TIMEOUT, pexpect.EOF])
+
+    # Check for error in creating SSH session
+    if result != 0:
+        print('---FAILURE! creating SSH session for:', ip_address)
+        exit()
+
+    # Send password
+    session.sendline(password)
+    result = session.expect(['>', pexpect.TIMEOUT, pexpect.EOF])
+
+    if result != 0:
+        print('---FAILURE! entering password:', password)
+        exit()
+
+    # Enter enable mode
+    session.sendline('enable')
+    result = session.expect(['Password:', pexpect.TIMEOUT, pexpect.EOF])
+
+    if result != 0:
+        print('--- Failure! entering enable mode')
+        exit()
+
+    # Send enable password
+    session.sendline(password_enable)
+    result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+    if result != 0:
+        print('--- Failure! entering enable mode after sending password')
+        exit()
+
+    # Enter config mode
+    session.sendline('configure terminal')
+    result = session.expect([r'.\(config\)#', pexpect.TIMEOUT, pexpect.EOF])
+
+    if result != 0:
+        print('--- Failure! entering config mode')
+        exit()
+
+    # Change hostname to R1
+    session.sendline('hostname R1')
+    result = session.expect([r'R1\(config\)#', pexpect.TIMEOUT, pexpect.EOF])
+
+    if result != 0:
+        print('--- Failure! setting hostname')
+        exit()
+
+    # Exit config mode
+    session.sendline('exit')
+
+    # Retrieve the running configuration
+    session.sendline('show running-config')
+    result = session.expect(['#', pexpect.TIMEOUT, pexpect.EOF])
+
+    if result != 0:
+        print('--- FAILURE! retrieving running configuration')
+    else:
+        running_config_ssh = session.before  # Capture the output
+
+        # Save the SSH running config to a file
+        with open(output_file_ssh, 'w') as file:
+            file.write(running_config_ssh)
+
+        print(f'--- SSH running config saved to {output_file_ssh}')
+
+    # Exit enable mode
+    session.sendline('exit')
+
+    # Close SSH session
+    session.close()
+
+# =================== MAIN SCRIPT ===================
+
+if __name__ == '__main__':
+    # Run the Telnet connection and save the running config
+    connect_telnet()
+
+    # Run the SSH connection, change hostname, and save running config
+    connect_ssh()
